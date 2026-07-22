@@ -1,0 +1,188 @@
+// Cabinet Eddahbi — Prisma schema
+// ---------------------------------------------------------------
+// IMPORTANT: SQLite (via Prisma) does not support native enum types.
+// Enum-like columns are persisted as TEXT and validated at the
+// application layer (see `lib/constants.ts` and the Zod schemas in
+// `lib/validation/`). The "/// allowed:" comments below document the
+// canonical set of accepted values for each column.
+// ---------------------------------------------------------------
+
+generator client {
+  provider      = "prisma-client-js"
+  // `linux-musl-openssl-3.0.x` covers the node:20-alpine runtime image
+  // used in the production Dockerfile.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------
+// Auth & RBAC
+// ---------------------------------------------------------------
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String // bcrypt hash — never store plaintext
+  role      String /// allowed: RECEPTIONIST | DOCTOR
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([username])
+}
+
+// ---------------------------------------------------------------
+// Clinic expenses — outgoing costs tracked by DOCTOR.
+// ---------------------------------------------------------------
+
+model Expense {
+  id        String   @id @default(cuid())
+  title     String
+  amount    Float
+  category  String /// allowed: see EXPENSE_CATEGORIES in lib/constants.ts
+  date      DateTime
+  notes     String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@index([category])
+}
+
+// ---------------------------------------------------------------
+// Patient registry (managed by RECEPTIONIST and DOCTOR)
+// ---------------------------------------------------------------
+
+model Patient {
+  id                String   @id @default(cuid())
+  name              String
+  age               String // free-form per spec (e.g. "32 ans", "8 mois")
+  gender            String /// allowed: Male | Female | Child
+  phoneNumber       String?
+  cin               String?  @unique
+  insuranceProvider String   @default("NONE") /// allowed: CNSS | CNOPS | MUTUELLE | NONE
+  surgicalHistory   String   @default("")
+  allergies         String   @default("")
+  contraindications String   @default("")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  visits Visit[]
+
+  @@index([name])
+  @@index([cin])
+  @@index([phoneNumber])
+}
+
+// ---------------------------------------------------------------
+// Visit — also acts as the doctor's "Waiting List"
+// when status == "Pending" and date == today.
+// ---------------------------------------------------------------
+
+model Visit {
+  id        String   @id @default(cuid())
+  patientId String
+  date      DateTime @default(now())
+  visitType String   @default("Consultation") /// allowed: Consultation | Control
+  price     Float    @default(150)
+  status    String   @default("Pending") /// allowed: Pending | Completed
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  consultation Consultation?
+
+  @@index([patientId])
+  @@index([date])
+  @@index([status])
+  @@index([status, date]) // fast lookup for "today's pending visits"
+}
+
+// ---------------------------------------------------------------
+// Consultation — the clinical record bound 1-1 to a Visit.
+// Only DOCTOR role may create / read these records.
+// ---------------------------------------------------------------
+
+model Consultation {
+  id                  String    @id @default(cuid())
+  visitId             String    @unique
+  date                DateTime  @default(now())
+  reasonForVisit      String    @default("")
+  hps                 String    @default("") // History of Present Illness
+  rs                  String    @default("") // Review of Systems
+  pe                  String    @default("") // Physical Examination
+  vitals              String    @default("") // BP / HR / Temp / SpO2 / Weight ...
+  eco                 String    @default("") // Echography findings
+  bloodWork           String    @default("") // Lab / blood work findings
+  clinicalNotes       String    @default("")
+  diagnosis           String    @default("")
+  prescribedTreatment String    @default("")
+  dosageInstructions  String    @default("")
+  allergiesConsidered String    @default("")
+  followUpDate        DateTime?
+  notes               String    @default("")
+  hasCnss             Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  visit        Visit             @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  documents    MedicalDocument[]
+  prescription Prescription?
+
+  @@index([date])
+}
+
+// ---------------------------------------------------------------
+// Structured prescription (ordonnance) — 1:1 with Consultation.
+// Line items use morning / noon / evening dose counts (e.g. 1-0-1).
+// ---------------------------------------------------------------
+
+model Prescription {
+  id               String   @id @default(cuid())
+  consultationId   String   @unique
+  prescriptionDate DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  consultation Consultation       @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  items        PrescriptionItem[]
+
+  @@index([prescriptionDate])
+}
+
+model PrescriptionItem {
+  id             String @id @default(cuid())
+  prescriptionId String
+  medication     String
+  medicationType String @default("")
+  doseMorning    Int    @default(0)
+  doseNoon       Int    @default(0)
+  doseEvening    Int    @default(0)
+  duration       String @default("")
+  sortOrder      Int    @default(0)
+
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+
+  @@index([prescriptionId])
+}
+
+// ---------------------------------------------------------------
+// Medical attachments (photos, scans, lab PDFs, ...).
+// Files are stored on the local persistent volume; only the
+// relative path is persisted here.
+// ---------------------------------------------------------------
+
+model MedicalDocument {
+  id             String   @id @default(cuid())
+  consultationId String
+  fileUrl        String // e.g. "/uploads/2026/05/<cuid>.jpg" (relative to /app/data)
+  documentType   String /// e.g. "photo" | "lab" | "scan" | "prescription" | "other"
+  createdAt      DateTime @default(now())
+
+  consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+
+  @@index([consultationId])
+}

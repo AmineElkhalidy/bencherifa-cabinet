@@ -1,0 +1,68 @@
+# Cabinet Eddahbi — local production stack.
+#
+# Usage:
+#   cp .env.example .env       # then fill in the secrets
+#   docker compose up -d --build
+#
+# The SQLite database file and all uploaded medical documents live
+# inside the named volume `cabinet-data`, mounted at /app/data inside
+# the container. Back the volume up regularly (the in-app Google Drive
+# job handles full CSV/XLSX/DB/ZIP backups; this volume is the raw
+# source of truth for binaries — photos, scans, lab PDFs).
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cabinet-eddahbi:latest
+    container_name: cabinet-eddahbi
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      TZ: ${TZ:-Africa/Casablanca}
+
+      # --- Database (SQLite on the persistent volume) ---
+      DATABASE_URL: file:/app/data/cabinet.db
+
+      # --- Sessions (jose JWT) ---
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set in .env}
+      SESSION_MAX_AGE_DAYS: ${SESSION_MAX_AGE_DAYS:-7}
+      ALLOW_INSECURE_SESSION: "true"
+
+      # --- File uploads ---
+      UPLOAD_DIR: /app/data/uploads
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+
+      # --- Backup job (daily at midnight by default) ---
+      ENABLE_BACKUP_CRON: ${ENABLE_BACKUP_CRON:-1}
+      BACKUP_CRON: ${BACKUP_CRON:-0 0 * * *}
+      BACKUP_DIR: /app/data/backups
+
+      # --- Google Drive integration (service-account JSON) ---
+      GOOGLE_DRIVE_CLIENT_EMAIL: ${GOOGLE_DRIVE_CLIENT_EMAIL:-}
+      GOOGLE_DRIVE_PRIVATE_KEY:  ${GOOGLE_DRIVE_PRIVATE_KEY:-}
+      GOOGLE_DRIVE_FOLDER_ID:    ${GOOGLE_DRIVE_FOLDER_ID:-}
+
+      # --- First-run admin bootstrap ---
+      SEED_ON_BOOT:           ${SEED_ON_BOOT:-1}
+      SEED_DOCTOR_USERNAME:   ${SEED_DOCTOR_USERNAME:-doctor}
+      SEED_DOCTOR_PASSWORD:   ${SEED_DOCTOR_PASSWORD:?seed doctor password required on first boot}
+      SEED_RECEPTION_USERNAME: ${SEED_RECEPTION_USERNAME:-reception}
+      SEED_RECEPTION_PASSWORD: ${SEED_RECEPTION_PASSWORD:?seed reception password required on first boot}
+
+    volumes:
+      - cabinet-data:/app/data
+    healthcheck:
+      test:
+        ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  cabinet-data:
+    driver: local

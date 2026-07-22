@@ -1,0 +1,2 @@
+﻿id,visitId,patientName,cin,date,reasonForVisit,hps,rs,pe,vitals,eco,bloodWork,diagnosis,prescribedTreatment,dosageInstructions,allergiesConsidered,followUpDate,notes,hasCnss,createdAt
+

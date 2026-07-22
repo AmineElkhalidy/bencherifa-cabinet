@@ -1,0 +1,74 @@
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0; /* Hides browser default header/footer (date, title, URL) */
+  }
+
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .app-dashboard-header,
+  .prescription-toolbar,
+  aside,
+  nav {
+    display: none !important;
+  }
+
+  .flex.h-svh,
+  .flex.h-svh > div {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .prescription-print-root {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  .prescription-print-page {
+    padding: 10mm !important; /* Replaces the @page margin to keep content safe from edges */
+    margin: 0 !important;
+    background: white !important;
+    overflow: visible !important;
+  }
+
+  #prescription-print,
+  #prescription-print .prescription-sheet {
+    box-shadow: none !important;
+    outline: none !important;
+    max-width: none !important;
+    width: 100% !important;
+    /* Full printable area (A4 minus @page margins) */
+    min-height: 277mm !important;
+    height: 277mm !important;
+    display: grid !important;
+    grid-template-rows: auto 1fr auto !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .prescription-sheet-body {
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .prescription-sheet-header {
+    display: block !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .prescription-sheet-footer {
+    align-self: end !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

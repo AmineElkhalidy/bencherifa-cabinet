@@ -1,0 +1,36 @@
+node_modules
+.next
+.next/cache
+out
+build
+dist
+coverage
+
+# Local DB & user-uploaded files must never end up in the image.
+data
+prisma/*.db
+prisma/*.db-journal
+*.sqlite
+*.sqlite-journal
+
+# Editor / OS noise
+.DS_Store
+.idea
+.vscode
+*.log
+
+# Source control
+.git
+.gitignore
+.github
+
+# Env files (secrets are injected via docker-compose)
+.env
+.env.*
+!.env.example
+
+# Tests / docs
+tests
+__tests__
+*.md
+!README.md
