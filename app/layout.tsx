@@ -18,14 +18,38 @@ const geistMono = Geist_Mono({
 
 import { APP_CONFIG } from "@/lib/config";
 
+const siteDescription = `Cabinet médical du ${APP_CONFIG.doctorNameFr} — ${APP_CONFIG.specialtyFr}. Gestion des patients, consultations, ordonnances et archives médicales.`;
+
 export const metadata: Metadata = {
   title: {
     default: APP_CONFIG.clinicName,
     template: `%s · ${APP_CONFIG.clinicName}`,
   },
-  description:
-    "Medical clinic management platform for patients, consultations, prescriptions, and archives.",
+  description: siteDescription,
   applicationName: APP_CONFIG.clinicName,
+  authors: [{ name: APP_CONFIG.doctorNameFr }],
+  keywords: [
+    APP_CONFIG.clinicName,
+    APP_CONFIG.doctorNameFr,
+    APP_CONFIG.doctorNameAr,
+    APP_CONFIG.specialtyFr,
+    APP_CONFIG.specialtyAr,
+    "cabinet médical",
+    "عيادة طبية",
+    APP_CONFIG.location,
+  ],
+  openGraph: {
+    type: "website",
+    locale: "fr_MA",
+    siteName: APP_CONFIG.clinicName,
+    title: `${APP_CONFIG.clinicName} — ${APP_CONFIG.doctorNameFr}`,
+    description: siteDescription,
+  },
+  twitter: {
+    card: "summary",
+    title: `${APP_CONFIG.clinicName} — ${APP_CONFIG.doctorNameFr}`,
+    description: siteDescription,
+  },
 };
 
 export default function RootLayout({
