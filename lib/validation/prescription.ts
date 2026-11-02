@@ -3,17 +3,25 @@ import { z } from "zod";
 const doseField = z.coerce.number().int().min(0).max(9);
 
 const prescriptionItemRawSchema = z.object({
-  medication: z.string().trim(),
-  medicationType: z.string().trim(),
-  duration: z.string().trim(),
+  medication: z.string().trim().max(200, "Medication name is too long."),
+  medicationType: z.string().trim().max(100, "Medication type is too long."),
+  duration: z.string().trim().max(100, "Duration is too long."),
   doseMorning: doseField.default(0),
   doseNoon: doseField.default(0),
   doseEvening: doseField.default(0),
 });
 
 export const prescriptionItemSchema = prescriptionItemRawSchema.extend({
-  medication: z.string().trim().min(1, "Medication name is required."),
-  duration: z.string().trim().min(1, "Treatment duration is required."),
+  medication: z
+    .string()
+    .trim()
+    .min(1, "Medication name is required.")
+    .max(200, "Medication name is too long."),
+  duration: z
+    .string()
+    .trim()
+    .min(1, "Treatment duration is required.")
+    .max(100, "Duration is too long."),
 });
 
 const prescriptionDateField = z
@@ -24,7 +32,7 @@ const prescriptionDateField = z
   });
 
 export const prescriptionDraftSchema = z.object({
-  visitId: z.string().min(1),
+  visitId: z.string().min(1).max(64),
   prescriptionDate: prescriptionDateField,
   items: z.array(prescriptionItemRawSchema).max(20),
 });

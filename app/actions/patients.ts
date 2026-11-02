@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 
-import { requireAuth } from "@/lib/auth/rbac";
+import { requireAuth, requireRole } from "@/lib/auth/rbac";
 import { prisma } from "@/lib/db";
+import { logger } from "@/lib/logger";
 import { patientSchema, patientUpdateSchema } from "@/lib/validation/patient";
 
 export type PatientFormState = {
@@ -14,18 +15,21 @@ export type PatientFormState = {
   patient?: { id: string };
 } | null;
 
-function readFormFields(formData: FormData) {
-  return {
+function readFormFields(formData: FormData, includeMedicalHistory: boolean) {
+  const base: Record<string, unknown> = {
     name: formData.get("name") ?? "",
     age: formData.get("age") ?? "",
     gender: formData.get("gender") ?? "",
     phoneNumber: formData.get("phoneNumber") ?? "",
     cin: formData.get("cin") ?? "",
     insuranceProvider: formData.get("insuranceProvider") ?? "NONE",
-    surgicalHistory: formData.get("surgicalHistory") ?? "",
-    allergies: formData.get("allergies") ?? "",
-    contraindications: formData.get("contraindications") ?? "",
   };
+  if (includeMedicalHistory) {
+    base.surgicalHistory = formData.get("surgicalHistory") ?? "";
+    base.allergies = formData.get("allergies") ?? "";
+    base.contraindications = formData.get("contraindications") ?? "";
+  }
+  return base;
 }
 
 function normalizePatientData<T extends { cin?: string; phoneNumber?: string }>(
@@ -44,8 +48,9 @@ export async function createPatient(
   _prev: PatientFormState,
   formData: FormData
 ): Promise<PatientFormState> {
-  await requireAuth();
-  const parsed = patientSchema.safeParse(readFormFields(formData));
+  const session = await requireAuth();
+  const isDoctor = session.role === "DOCTOR";
+  const parsed = patientSchema.safeParse(readFormFields(formData, isDoctor));
   if (!parsed.success) {
     return {
       fieldErrors: parsed.error.flatten().fieldErrors,
@@ -56,6 +61,10 @@ export async function createPatient(
   try {
     const patient = await prisma.patient.create({
       data: normalizePatientData(parsed.data),
+    });
+    logger.info("patients", "Patient created", {
+      patientId: patient.id,
+      byUserId: session.userId,
     });
     revalidatePath("/reception/patients");
     revalidatePath("/reception");
@@ -70,7 +79,7 @@ export async function createPatient(
         fieldErrors: { cin: ["CIN already registered."] },
       };
     }
-    console.error("[createPatient]", err);
+    logger.error("patients", "Failed to create patient", { error: err });
     return { error: "Server error. Please try again." };
   }
 }
@@ -80,8 +89,11 @@ export async function updatePatient(
   _prev: PatientFormState,
   formData: FormData
 ): Promise<PatientFormState> {
-  await requireAuth();
-  const parsed = patientUpdateSchema.safeParse(readFormFields(formData));
+  const session = await requireAuth();
+  const isDoctor = session.role === "DOCTOR";
+  const parsed = patientUpdateSchema.safeParse(
+    readFormFields(formData, isDoctor)
+  );
   if (!parsed.success) {
     return {
       fieldErrors: parsed.error.flatten().fieldErrors,
@@ -90,9 +102,21 @@ export async function updatePatient(
   }
 
   try {
+    const updatePayload = normalizePatientData(parsed.data);
+    // If not a doctor, preserve existing clinical history fields
+    if (!isDoctor) {
+      delete (updatePayload as Record<string, unknown>).surgicalHistory;
+      delete (updatePayload as Record<string, unknown>).allergies;
+      delete (updatePayload as Record<string, unknown>).contraindications;
+    }
+
     await prisma.patient.update({
       where: { id },
-      data: normalizePatientData(parsed.data),
+      data: updatePayload,
+    });
+    logger.info("patients", "Patient updated", {
+      patientId: id,
+      byUserId: session.userId,
     });
     revalidatePath("/reception/patients");
     revalidatePath(`/reception/patients/${id}`);
@@ -107,13 +131,17 @@ export async function updatePatient(
         fieldErrors: { cin: ["CIN already registered."] },
       };
     }
-    console.error("[updatePatient]", err);
+    logger.error("patients", "Failed to update patient", { error: err });
     return { error: "Server error. Please try again." };
   }
 }
 
 export async function deletePatient(id: string) {
-  await requireAuth();
+  const session = await requireRole("DOCTOR");
   await prisma.patient.delete({ where: { id } });
+  logger.info("patients", "Patient deleted", {
+    patientId: id,
+    byUserId: session.userId,
+  });
   revalidatePath("/reception/patients");
 }

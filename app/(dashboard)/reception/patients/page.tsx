@@ -13,7 +13,17 @@ export default async function PatientsListPage() {
 
   const patients = await prisma.patient.findMany({
     orderBy: { createdAt: "desc" },
-    include: { _count: { select: { visits: true } } },
+    select: {
+      id: true,
+      name: true,
+      age: true,
+      gender: true,
+      phoneNumber: true,
+      cin: true,
+      insuranceProvider: true,
+      createdAt: true,
+      _count: { select: { visits: true } },
+    },
   });
 
   const rows: PatientRow[] = patients.map((p) => ({

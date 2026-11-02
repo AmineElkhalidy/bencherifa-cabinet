@@ -1,12 +1,15 @@
 import "server-only";
 
 import { createWriteStream } from "node:fs";
-import { createRequire } from "node:module";
 import { access, readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import archiverPkg from "archiver";
 
-const require = createRequire(import.meta.url);
-const archiver = require("archiver") as typeof import("archiver");
+const createArchiver = (
+  typeof archiverPkg === "function"
+    ? archiverPkg
+    : (archiverPkg as unknown as { default: typeof archiverPkg }).default
+) as typeof archiverPkg;
 
 async function dirHasFiles(dir: string): Promise<boolean> {
   try {
@@ -35,7 +38,7 @@ export async function zipDirectory(
 
   await new Promise<void>((resolve, reject) => {
     const output = createWriteStream(destZipPath);
-    const archive = archiver("zip", { zlib: { level: 6 } });
+    const archive = createArchiver("zip", { zlib: { level: 6 } });
 
     output.on("close", () => resolve());
     archive.on("error", reject);

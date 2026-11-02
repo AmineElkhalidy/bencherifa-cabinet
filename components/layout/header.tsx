@@ -3,9 +3,14 @@
 import { useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOut, Moon, Sun, User as UserIcon } from "lucide-react";
+import { LogOut, Menu, Moon, Sun, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  DOCTOR_ITEMS,
+  RECEPTION_ITEMS,
+  SETTINGS_ITEMS,
+} from "@/components/layout/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +37,8 @@ type Props = {
 export function Header({ username, role, title, description, actions }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const navItems = role === "DOCTOR" ? DOCTOR_ITEMS : RECEPTION_ITEMS;
+  const showSettings = role === "DOCTOR";
 
   function handleLogout() {
     startTransition(async () => {
@@ -60,6 +67,50 @@ export function Header({ username, role, title, description, actions }: Props) {
     <header className="app-dashboard-header flex flex-col gap-4 border-b border-border bg-card/60 px-6 py-5 backdrop-blur-sm md:flex-row md:items-center md:justify-between">
       <div className="space-y-1">
         <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="mr-1 h-8 w-8 md:hidden"
+                aria-label="Menu de navigation"
+              >
+                <Menu className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56 md:hidden">
+              <DropdownMenuLabel>Navigation</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <DropdownMenuItem key={item.href} asChild>
+                    <Link href={item.href}>
+                      <Icon className="mr-2 h-4 w-4" />
+                      <span>{item.label}</span>
+                    </Link>
+                  </DropdownMenuItem>
+                );
+              })}
+              {showSettings ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Administration</DropdownMenuLabel>
+                  {SETTINGS_ITEMS.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <DropdownMenuItem key={item.href} asChild>
+                        <Link href={item.href}>
+                          <Icon className="mr-2 h-4 w-4" />
+                          <span>{item.label}</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <span>{APP_CONFIG.clinicName}</span>
           <span aria-hidden>•</span>
           <Badge variant="muted" className="rounded-md px-2 py-0.5 text-[10px]">
@@ -118,17 +169,13 @@ export function Header({ username, role, title, description, actions }: Props) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {role === "DOCTOR" && (
-              <>
-                <DropdownMenuItem asChild>
-                  <Link href="/profile">
-                    <UserIcon className="mr-2 h-4 w-4" />
-                    <span>Profil</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-              </>
-            )}
+            <DropdownMenuItem asChild>
+              <Link href="/profile">
+                <UserIcon className="mr-2 h-4 w-4" />
+                <span>Profil</span>
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem
               disabled={isPending}
               onSelect={(e) => {

@@ -43,6 +43,8 @@ export function databasePath() {
     : path.resolve(process.cwd(), filePath);
 }
 
+export const resolveSqliteFile = databasePath;
+
 export async function ensureDir(dir: string) {
   await fs.mkdir(dir, { recursive: true });
 }
@@ -63,11 +65,92 @@ export function safeBasename(name: string) {
  * making sure it stays inside the upload directory (path-traversal safe).
  */
 export function resolveUpload(fileUrl: string) {
-  const base = uploadDir();
+  if (
+    fileUrl.includes("..") ||
+    fileUrl.includes("\0") ||
+    path.isAbsolute(fileUrl)
+  ) {
+    throw new Error("Invalid upload path");
+  }
+  const base = path.resolve(uploadDir());
   const cleaned = fileUrl.replace(/^\/+/, "").replace(/^uploads[\\/]+/, "");
   const resolved = path.resolve(base, cleaned);
   if (!resolved.startsWith(base + path.sep) && resolved !== base) {
-    throw new Error("Invalid file path");
+    throw new Error("Invalid upload path");
   }
   return resolved;
+}
+
+/**
+ * Inspects the first bytes (magic signature) of an uploaded buffer to
+ * determine the true file format and return its canonical extension (`.png`, `.jpg`, `.gif`, `.webp`, `.pdf`).
+ * Returns null if the signature does not match an allowed medical document format.
+ */
+export function detectAllowedFileExtension(
+  buffer: Buffer,
+  declaredMime: string
+): string | null {
+  if (buffer.length < 4) return null;
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return declaredMime === "image/png" ? ".png" : null;
+  }
+
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return declaredMime === "image/jpeg" ? ".jpg" : null;
+  }
+
+  // GIF: GIF87a or GIF89a
+  if (
+    buffer.length >= 6 &&
+    buffer[0] === 0x47 &&
+    buffer[1] === 0x49 &&
+    buffer[2] === 0x46 &&
+    buffer[3] === 0x38 &&
+    (buffer[4] === 0x37 || buffer[4] === 0x39) &&
+    buffer[5] === 0x61
+  ) {
+    return declaredMime === "image/gif" ? ".gif" : null;
+  }
+
+  // WEBP: RIFF....WEBP
+  if (
+    buffer.length >= 12 &&
+    buffer[0] === 0x52 &&
+    buffer[1] === 0x49 &&
+    buffer[2] === 0x46 &&
+    buffer[3] === 0x46 &&
+    buffer[8] === 0x57 &&
+    buffer[9] === 0x45 &&
+    buffer[10] === 0x42 &&
+    buffer[11] === 0x50
+  ) {
+    return declaredMime === "image/webp" ? ".webp" : null;
+  }
+
+  // PDF: %PDF-
+  if (
+    buffer.length >= 5 &&
+    buffer[0] === 0x25 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x44 &&
+    buffer[3] === 0x46 &&
+    buffer[4] === 0x2d
+  ) {
+    return declaredMime === "application/pdf" ? ".pdf" : null;
+  }
+
+  return null;
 }

@@ -1,22 +1,10 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeScript } from "@/components/layout/theme-script";
+import { APP_CONFIG } from "@/lib/config";
 
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-import { APP_CONFIG } from "@/lib/config";
 
 const siteDescription = `Cabinet médical du ${APP_CONFIG.doctorNameFr} — ${APP_CONFIG.specialtyFr}. Gestion des patients, consultations, ordonnances et archives médicales.`;
 
@@ -56,15 +44,11 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html
-      lang="fr"
-      suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
+    <html lang="fr" suppressHydrationWarning className="h-full antialiased">
       <head>
         <ThemeScript />
       </head>
-      <body className="min-h-full flex flex-col bg-background text-foreground">
+      <body className="min-h-full flex flex-col bg-background text-foreground font-sans">
         {children}
         <Toaster />
       </body>

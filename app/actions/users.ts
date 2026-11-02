@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth/rbac";
 import { hashPassword } from "@/lib/auth/password";
 import { prisma } from "@/lib/db";
+import { logger } from "@/lib/logger";
 import {
   userCreateSchema,
   userPasswordUpdateSchema,
@@ -36,7 +37,7 @@ export async function createUser(
   _prev: UserActionState,
   formData: FormData
 ): Promise<UserActionState> {
-  await requireRole("DOCTOR");
+  const session = await requireRole("DOCTOR");
 
   const parsed = userCreateSchema.safeParse({
     username: formData.get("username"),
@@ -52,12 +53,17 @@ export async function createUser(
   }
 
   try {
-    await prisma.user.create({
+    const created = await prisma.user.create({
       data: {
         username: parsed.data.username,
         password: await hashPassword(parsed.data.password),
         role: parsed.data.role,
       },
+    });
+    logger.info("users", "User account created", {
+      targetUserId: created.id,
+      role: created.role,
+      byUserId: session.userId,
     });
     revalidateUsers();
     return { ok: true };
@@ -71,7 +77,7 @@ export async function createUser(
         fieldErrors: { username: ["Username already in use."] },
       };
     }
-    console.error("[createUser]", err);
+    logger.error("users", "Failed to create user", { error: err });
     return { error: "Server error. Please try again." };
   }
 }
@@ -93,8 +99,7 @@ export async function updateUserRole(
 
   if (user.id === session.userId && parsed.data.role !== "DOCTOR") {
     return {
-      error:
-        "You cannot remove your own doctor access from this page.",
+      error: "You cannot remove your own doctor access from this page.",
     };
   }
 
@@ -109,6 +114,11 @@ export async function updateUserRole(
     where: { id: userId },
     data: { role: parsed.data.role },
   });
+  logger.info("users", "User role updated", {
+    targetUserId: userId,
+    newRole: parsed.data.role,
+    byUserId: session.userId,
+  });
   revalidateUsers();
   return { ok: true };
 }
@@ -117,7 +127,7 @@ export async function updateUserPassword(
   userId: string,
   password: string
 ): Promise<UserActionState> {
-  await requireRole("DOCTOR");
+  const session = await requireRole("DOCTOR");
   const parsed = userPasswordUpdateSchema.safeParse({ password });
   if (!parsed.success) {
     return {
@@ -134,6 +144,10 @@ export async function updateUserPassword(
   await prisma.user.update({
     where: { id: userId },
     data: { password: await hashPassword(parsed.data.password) },
+  });
+  logger.info("users", "User password reset by admin", {
+    targetUserId: userId,
+    byUserId: session.userId,
   });
   revalidateUsers();
   return { ok: true };
@@ -159,6 +173,10 @@ export async function deleteUser(userId: string): Promise<UserActionState> {
   }
 
   await prisma.user.delete({ where: { id: userId } });
+  logger.info("users", "User deleted", {
+    targetUserId: userId,
+    byUserId: session.userId,
+  });
   revalidateUsers();
   return { ok: true };
 }

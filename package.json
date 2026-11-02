@@ -15,7 +15,9 @@
     "db:reset": "prisma migrate reset",
     "seed": "node prisma/seed.mjs",
     "postinstall": "prisma generate",
-    "backup:run": "tsx --env-file=.env scripts/run-backup.ts"
+    "backup:run": "tsx --env-file=.env scripts/run-backup.ts",
+    "backup:restore": "tsx --env-file=.env scripts/restore-backup.ts",
+    "test": "tsx --test tests/unit.test.ts tests/integration.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

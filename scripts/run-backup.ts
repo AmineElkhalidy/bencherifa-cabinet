@@ -9,12 +9,27 @@ import Module from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+type ModuleWithResolve = typeof Module & {
+  _resolveFilename: (
+    request: string,
+    parent: unknown,
+    isMain: boolean,
+    options: unknown
+  ) => string;
+};
+
 const stubPath = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "server-only-stub.cjs"
 );
-const resolveFilename = (Module as any)._resolveFilename;
-(Module as any)._resolveFilename = function (request: string, parent: any, isMain: boolean, options: any) {
+const mod = Module as ModuleWithResolve;
+const resolveFilename = mod._resolveFilename;
+mod._resolveFilename = function (
+  request: string,
+  parent: unknown,
+  isMain: boolean,
+  options: unknown
+) {
   if (request === "server-only") return stubPath;
   return resolveFilename.call(this, request, parent, isMain, options);
 };

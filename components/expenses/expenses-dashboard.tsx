@@ -286,12 +286,14 @@ export function ExpensesDashboard({ expenses, summary }: Props) {
       </Card>
 
       <ExpenseFormDialog
+        key={addOpen ? "create-open" : "create-closed"}
         open={addOpen}
         onOpenChange={setAddOpen}
         mode="create"
       />
 
       <ExpenseFormDialog
+        key={editTarget?.id ?? "edit-closed"}
         open={!!editTarget}
         onOpenChange={(open) => !open && setEditTarget(null)}
         mode="edit"
@@ -327,15 +329,6 @@ function ExpenseFormDialog({
     expense?.category ?? "Consumables"
   );
   const handledStateRef = useRef<ExpenseActionState>(null);
-
-  useEffect(() => {
-    if (open && expense) {
-      setCategory(expense.category);
-    }
-    if (open && mode === "create" && !expense) {
-      setCategory("Consumables");
-    }
-  }, [open, expense, mode]);
 
   useEffect(() => {
     if (state === handledStateRef.current) return;

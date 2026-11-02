@@ -3,11 +3,16 @@ import { z } from "zod";
 import { GENDERS, INSURANCE_PROVIDERS } from "@/lib/constants";
 
 export const patientSchema = z.object({
-  name: z.string().trim().min(2, "Full name is required"),
+  name: z
+    .string()
+    .trim()
+    .min(2, "Full name is required")
+    .max(120, "Full name is too long"),
   age: z
     .string()
     .trim()
     .min(1, "Age is required")
+    .max(40, "Age is too long")
     .refine(
       (v) => {
         const n = parseInt(v, 10);
@@ -30,9 +35,9 @@ export const patientSchema = z.object({
     .optional()
     .or(z.literal("")),
   insuranceProvider: z.enum(INSURANCE_PROVIDERS).default("NONE"),
-  surgicalHistory: z.string().default(""),
-  allergies: z.string().default(""),
-  contraindications: z.string().default(""),
+  surgicalHistory: z.string().max(4000, "Text is too long").default(""),
+  allergies: z.string().max(4000, "Text is too long").default(""),
+  contraindications: z.string().max(4000, "Text is too long").default(""),
 });
 
 export type PatientInput = z.infer<typeof patientSchema>;

@@ -31,14 +31,14 @@ import {
 import { ROLE_LABELS, type Role } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
-type NavItem = {
+export type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
   description?: string;
 };
 
-const RECEPTION_ITEMS: NavItem[] = [
+export const RECEPTION_ITEMS: NavItem[] = [
   { href: "/reception", label: "Tableau de bord", icon: LayoutDashboard },
   { href: "/reception/patients", label: "Patients", icon: Users },
   {
@@ -48,7 +48,7 @@ const RECEPTION_ITEMS: NavItem[] = [
   },
 ];
 
-const DOCTOR_ITEMS: NavItem[] = [
+export const DOCTOR_ITEMS: NavItem[] = [
   { href: "/doctor", label: "Tableau de bord", icon: LayoutDashboard },
   {
     href: "/doctor/waiting-list",
@@ -65,7 +65,7 @@ const DOCTOR_ITEMS: NavItem[] = [
   { href: "/reception/patients", label: "Patients", icon: Users },
 ];
 
-const SETTINGS_ITEMS: NavItem[] = [
+export const SETTINGS_ITEMS: NavItem[] = [
   { href: "/settings/users", label: "Utilisateurs", icon: UserCog },
   { href: "/settings/backups", label: "Sauvegardes", icon: Settings },
 ];

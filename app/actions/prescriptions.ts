@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireRole } from "@/lib/auth/rbac";
 import { prisma } from "@/lib/db";
+import { logger } from "@/lib/logger";
 import {
   prescriptionDraftSchema,
   prescriptionSchema,
@@ -69,7 +70,7 @@ function revalidatePrescriptionPaths(visitId: string) {
 }
 
 function parsePrescriptionItems(formData: FormData) {
-  const items: {
+  const rawItems: {
     medication: string;
     medicationType: string;
     duration: string;
@@ -78,10 +79,10 @@ function parsePrescriptionItems(formData: FormData) {
     doseEvening: number;
   }[] = [];
 
-  for (let i = 0; ; i++) {
+  for (let i = 0; i < 50; i++) {
     const medication = formData.get(`items[${i}].medication`);
     if (medication === null) break;
-    items.push({
+    rawItems.push({
       medication: String(medication),
       medicationType: String(formData.get(`items[${i}].medicationType`) ?? ""),
       duration: String(formData.get(`items[${i}].duration`) ?? ""),
@@ -91,14 +92,26 @@ function parsePrescriptionItems(formData: FormData) {
     });
   }
 
-  return items.filter((item) => item.medication.trim().length > 0);
+  const nonEmpty = rawItems.filter((item) => item.medication.trim().length > 0);
+
+  // Deduplicate identical medication + type entries (case-insensitive) while preserving order
+  const seen = new Set<string>();
+  const deduplicated: typeof nonEmpty = [];
+  for (const item of nonEmpty) {
+    const key = `${item.medication.trim().toLowerCase()}|${item.medicationType.trim().toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduplicated.push(item);
+  }
+
+  return deduplicated;
 }
 
 export async function savePrescriptionDraft(
   visitId: string,
   formData: FormData
 ): Promise<PrescriptionDraftState> {
-  await requireRole("DOCTOR");
+  const session = await requireRole("DOCTOR");
 
   const prescriptionDate = String(
     formData.get("prescriptionDate") ?? new Date().toISOString().slice(0, 10)
@@ -125,44 +138,55 @@ export async function savePrescriptionDraft(
     return { error: first ?? "Invalid prescription." };
   }
 
-  const visit = await prisma.visit.findUnique({
-    where: { id: parsed.data.visitId },
-    include: { consultation: true },
-  });
-
-  if (!visit) {
-    return { error: "Visit not found." };
-  }
-
-  let consultationId = visit.consultation?.id;
-
-  if (!consultationId) {
-    const created = await prisma.consultation.create({
-      data: { visitId: visit.id },
-    });
-    consultationId = created.id;
-  }
-
-  const items = parsed.data.items;
-  const summary = items.length > 0 ? formatPrescriptionSummary(items) : "";
-
-  const prescription = await prisma.$transaction(async (tx) => {
-    const existing = await tx.prescription.findUnique({
-      where: { consultationId },
+  try {
+    const visit = await prisma.visit.findUnique({
+      where: { id: parsed.data.visitId },
+      include: { consultation: true },
     });
 
-    if (existing) {
-      await tx.prescriptionItem.deleteMany({
-        where: { prescriptionId: existing.id },
-      });
+    if (!visit) {
+      return { error: "Visit not found." };
     }
 
-    if (items.length === 0) {
-      if (existing) {
-        await tx.prescription.update({
-          where: { id: existing.id },
-          data: { prescriptionDate: parsed.data.prescriptionDate },
+    const items = parsed.data.items;
+    const summary = items.length > 0 ? formatPrescriptionSummary(items) : "";
+
+    const result = await prisma.$transaction(async (tx) => {
+      let consultationId = visit.consultation?.id;
+
+      if (!consultationId) {
+        const created = await tx.consultation.create({
+          data: { visitId: visit.id },
         });
+        consultationId = created.id;
+      }
+
+      const existing = await tx.prescription.findUnique({
+        where: { consultationId },
+      });
+
+      if (existing) {
+        await tx.prescriptionItem.deleteMany({
+          where: { prescriptionId: existing.id },
+        });
+      }
+
+      if (items.length === 0) {
+        if (existing) {
+          await tx.prescription.update({
+            where: { id: existing.id },
+            data: { prescriptionDate: parsed.data.prescriptionDate },
+          });
+          await tx.consultation.update({
+            where: { id: consultationId },
+            data: {
+              prescribedTreatment: "",
+              dosageInstructions: "",
+            },
+          });
+          return { prescription: existing, consultationId };
+        }
+
         await tx.consultation.update({
           where: { id: consultationId },
           data: {
@@ -170,61 +194,59 @@ export async function savePrescriptionDraft(
             dosageInstructions: "",
           },
         });
-        return existing;
+        return { prescription: null, consultationId };
       }
+
+      const saved = await tx.prescription.upsert({
+        where: { consultationId },
+        create: {
+          consultationId,
+          prescriptionDate: parsed.data.prescriptionDate,
+          items: {
+            create: items.map((item, index) => ({
+              ...item,
+              sortOrder: index,
+            })),
+          },
+        },
+        update: {
+          prescriptionDate: parsed.data.prescriptionDate,
+          items: {
+            create: items.map((item, index) => ({
+              ...item,
+              sortOrder: index,
+            })),
+          },
+        },
+        include: { items: true },
+      });
 
       await tx.consultation.update({
         where: { id: consultationId },
         data: {
-          prescribedTreatment: "",
-          dosageInstructions: "",
+          prescribedTreatment: summary,
+          dosageInstructions:
+            "Type — Matin — Midi — Soir — Durée (voir ordonnance imprimée)",
         },
       });
-      return null;
-    }
 
-    const saved = await tx.prescription.upsert({
-      where: { consultationId },
-      create: {
-        consultationId,
-        prescriptionDate: parsed.data.prescriptionDate,
-        items: {
-          create: items.map((item, index) => ({
-            ...item,
-            sortOrder: index,
-          })),
-        },
-      },
-      update: {
-        prescriptionDate: parsed.data.prescriptionDate,
-        items: {
-          create: items.map((item, index) => ({
-            ...item,
-            sortOrder: index,
-          })),
-        },
-      },
-      include: { items: true },
+      return { prescription: saved, consultationId };
     });
 
-    await tx.consultation.update({
-      where: { id: consultationId },
-      data: {
-        prescribedTreatment: summary,
-        dosageInstructions:
-          "Type — Matin — Midi — Soir — Durée (voir ordonnance imprimée)",
-      },
+    revalidatePrescriptionPaths(visitId);
+
+    return {
+      ok: true,
+      prescriptionId: result.prescription?.id,
+      itemCount: items.length,
+      consultationId: result.consultationId,
+    };
+  } catch (err) {
+    logger.error("prescriptions", "Failed to save prescription draft", {
+      visitId,
+      byUserId: session.userId,
+      error: err,
     });
-
-    return saved;
-  });
-
-  revalidatePrescriptionPaths(visitId);
-
-  return {
-    ok: true,
-    prescriptionId: prescription?.id,
-    itemCount: items.length,
-    consultationId,
-  };
+    return { error: "Failed to save prescription." };
+  }
 }

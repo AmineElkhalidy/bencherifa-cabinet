@@ -47,19 +47,10 @@ import {
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-/**
- * Returns true when the entered number looks like a birth year
- * (4-digit year >= 1900 and not in the future).
- */
 function isBirthYear(n: number): boolean {
   return n >= 1900 && n <= CURRENT_YEAR;
 }
 
-/**
- * Given the raw value the receptionist typed, return the resolved age
- * that should be stored. If the value looks like a birth year, calculate
- * the age from it; otherwise use it directly.
- */
 function resolveAge(raw: number): number {
   if (isBirthYear(raw)) return CURRENT_YEAR - raw;
   return raw;
@@ -67,6 +58,7 @@ function resolveAge(raw: number): number {
 
 type Props = {
   mode: "create" | "edit";
+  canEditMedicalHistory?: boolean;
   patient?: {
     id: string;
     name: string;
@@ -81,7 +73,11 @@ type Props = {
   };
 };
 
-export function PatientForm({ mode, patient }: Props) {
+export function PatientForm({
+  mode,
+  canEditMedicalHistory = false,
+  patient,
+}: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const action =
@@ -94,19 +90,15 @@ export function PatientForm({ mode, patient }: Props) {
     FormData
   >(action, null);
 
-  // The raw value the receptionist typed (could be an age or a birth year)
   const defaultRaw = mode === "edit" && patient?.age ? patient.age : "";
   const [rawValue, setRawValue] = useState<string>(defaultRaw);
   const hiddenAgeRef = useRef<HTMLInputElement>(null);
 
   const parsedRaw = parseInt(rawValue, 10);
   const isBirthYearMode = !isNaN(parsedRaw) && isBirthYear(parsedRaw);
-  // The age that will actually be sent to the server
-  const resolvedAge = !isNaN(parsedRaw) && parsedRaw > 0
-    ? resolveAge(parsedRaw)
-    : "";
+  const resolvedAge =
+    !isNaN(parsedRaw) && parsedRaw >= 0 ? resolveAge(parsedRaw) : "";
 
-  // Keep the hidden age input in sync
   useEffect(() => {
     if (hiddenAgeRef.current) {
       hiddenAgeRef.current.value = resolvedAge.toString();
@@ -167,7 +159,6 @@ export function PatientForm({ mode, patient }: Props) {
             error={state?.fieldErrors?.age?.[0]}
             hint="Enter the age (e.g. 32) or the birth year (e.g. 1990)"
           >
-            {/* Hidden field carries the resolved age to the server */}
             <input
               ref={hiddenAgeRef}
               type="hidden"
@@ -266,47 +257,48 @@ export function PatientForm({ mode, patient }: Props) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Stethoscope className="h-5 w-5 text-primary" />
-            Medical history
-          </CardTitle>
-          <CardDescription>
-            Visible to the doctor during consultations. Optional, but
-            recommended.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <Field id="surgicalHistory" label="Surgical history" icon={Sparkles}>
-            <Textarea
-              id="surgicalHistory"
-              name="surgicalHistory"
-              defaultValue={patient?.surgicalHistory ?? ""}
-              placeholder="Past procedures, approximate dates..."
-              rows={3}
-            />
-          </Field>
-          <Field id="allergies" label="Allergies" icon={ShieldAlert}>
-            <Textarea
-              id="allergies"
-              name="allergies"
-              defaultValue={patient?.allergies ?? ""}
-              placeholder="Medications, food, latex..."
-              rows={3}
-            />
-          </Field>
-          <Field id="contraindications" label="Contraindications">
-            <Textarea
-              id="contraindications"
-              name="contraindications"
-              defaultValue={patient?.contraindications ?? ""}
-              placeholder="Medication or clinical restrictions."
-              rows={3}
-            />
-          </Field>
-        </CardContent>
-      </Card>
+      {canEditMedicalHistory ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Stethoscope className="h-5 w-5 text-primary" />
+              Medical history
+            </CardTitle>
+            <CardDescription>
+              Visible and editable only by the doctor.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <Field id="surgicalHistory" label="Surgical history" icon={Sparkles}>
+              <Textarea
+                id="surgicalHistory"
+                name="surgicalHistory"
+                defaultValue={patient?.surgicalHistory ?? ""}
+                placeholder="Past procedures, approximate dates..."
+                rows={3}
+              />
+            </Field>
+            <Field id="allergies" label="Allergies" icon={ShieldAlert}>
+              <Textarea
+                id="allergies"
+                name="allergies"
+                defaultValue={patient?.allergies ?? ""}
+                placeholder="Medications, food, latex..."
+                rows={3}
+              />
+            </Field>
+            <Field id="contraindications" label="Contraindications">
+              <Textarea
+                id="contraindications"
+                name="contraindications"
+                defaultValue={patient?.contraindications ?? ""}
+                placeholder="Medication or clinical restrictions."
+                rows={3}
+              />
+            </Field>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="flex flex-wrap items-center justify-end gap-3">
         <Button

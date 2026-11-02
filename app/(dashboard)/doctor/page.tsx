@@ -37,20 +37,32 @@ export default async function DoctorDashboardPage() {
   const session = await requireRole("DOCTOR");
   const { from, to } = todayRange();
 
-  const [waiting, completedToday, totalPatients, totalConsultations] =
-    await Promise.all([
-      prisma.visit.findMany({
-        where: { status: "Pending", date: { gte: from, lte: to } },
-        orderBy: { date: "asc" },
-        include: { patient: true },
-        take: 6,
-      }),
-      prisma.visit.count({
-        where: { status: "Completed", date: { gte: from, lte: to } },
-      }),
-      prisma.patient.count(),
-      prisma.consultation.count(),
-    ]);
+  const [
+    waiting,
+    waitingCount,
+    completedToday,
+    totalPatients,
+    totalConsultations,
+  ] = await Promise.all([
+    prisma.visit.findMany({
+      where: { status: "Pending", date: { gte: from, lte: to } },
+      orderBy: { date: "asc" },
+      include: {
+        patient: {
+          select: { id: true, name: true, phoneNumber: true },
+        },
+      },
+      take: 6,
+    }),
+    prisma.visit.count({
+      where: { status: "Pending", date: { gte: from, lte: to } },
+    }),
+    prisma.visit.count({
+      where: { status: "Completed", date: { gte: from, lte: to } },
+    }),
+    prisma.patient.count(),
+    prisma.consultation.count(),
+  ]);
 
   return (
     <>
@@ -71,7 +83,7 @@ export default async function DoctorDashboardPage() {
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard
             label="Patients en attente"
-            value={waiting.length}
+            value={waitingCount}
             hint="Aujourd'hui"
             icon={Clock}
             tone="warning"

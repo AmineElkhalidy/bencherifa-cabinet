@@ -30,9 +30,23 @@ import { initialsOf } from "@/lib/utils";
 export const metadata = { title: "Archives" };
 
 const PAGE_SIZE = 25;
+const MAX_SEARCH_CANDIDATES = 2500;
 
 const archiveItemInclude = {
-  visit: { include: { patient: true } },
+  visit: {
+    select: {
+      id: true,
+      visitType: true,
+      patient: {
+        select: {
+          id: true,
+          name: true,
+          cin: true,
+          phoneNumber: true,
+        },
+      },
+    },
+  },
 } satisfies Prisma.ConsultationInclude;
 
 type ArchiveItem = Prisma.ConsultationGetPayload<{
@@ -80,6 +94,7 @@ export default async function ArchivesPage(props: {
     const consultations = await prisma.consultation.findMany({
       orderBy: { createdAt: "desc" },
       include: archiveItemInclude,
+      take: MAX_SEARCH_CANDIDATES,
     });
     const filtered = consultations.filter((consultation) =>
       matchesSearchQuery(archiveSearchFields(consultation), queryString)

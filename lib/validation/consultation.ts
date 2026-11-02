@@ -10,28 +10,30 @@ const optionalDate = z
     return Number.isNaN(date.getTime()) ? null : date;
   });
 
+const clinicalText = z.string().max(10000, "Field exceeds maximum length").default("");
+
 export const consultationSchema = z.object({
-  visitId: z.string().min(1),
-  reasonForVisit: z.string().default(""),
-  hps: z.string().default(""),
-  rs: z.string().default(""),
-  pe: z.string().default(""),
-  vitals: z.string().default(""),
-  eco: z.string().default(""),
-  bloodWork: z.string().default(""),
-  clinicalNotes: z.string().default(""),
-  diagnosis: z.string().default(""),
-  prescribedTreatment: z.string().default(""),
-  dosageInstructions: z.string().default(""),
-  allergiesConsidered: z.string().default(""),
+  visitId: z.string().min(1).max(64),
+  reasonForVisit: clinicalText,
+  hps: clinicalText,
+  rs: clinicalText,
+  pe: clinicalText,
+  vitals: clinicalText,
+  eco: clinicalText,
+  bloodWork: clinicalText,
+  clinicalNotes: clinicalText,
+  diagnosis: z.string().max(500, "Diagnosis is too long").default(""),
+  prescribedTreatment: clinicalText,
+  dosageInstructions: clinicalText,
+  allergiesConsidered: clinicalText,
   followUpDate: optionalDate,
-  notes: z.string().default(""),
+  notes: clinicalText,
   hasCnss: z.coerce.boolean().default(false),
 });
 
 export type ConsultationInput = z.infer<typeof consultationSchema>;
 
 export const consultationUpdateSchema = consultationSchema.partial().extend({
-  visitId: z.string().min(1),
+  visitId: z.string().min(1).max(64),
 });
 export type ConsultationUpdateInput = z.infer<typeof consultationUpdateSchema>;

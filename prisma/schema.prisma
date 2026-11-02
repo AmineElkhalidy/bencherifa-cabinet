@@ -133,6 +133,8 @@ model Consultation {
   prescription Prescription?
 
   @@index([date])
+  @@index([createdAt])
+  @@index([diagnosis])
 }
 
 // ---------------------------------------------------------------

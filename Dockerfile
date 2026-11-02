@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # ----------------------------------------------------------------
-# Cabinet Eddahbi — production image
+# Cabinet Bencherifa — production image
 # Next.js 16 (App Router, output: "standalone") + Prisma + SQLite.
 # Multi-stage build keeps the final image small (~180 MB).
 # ----------------------------------------------------------------
@@ -26,6 +26,20 @@ RUN npm ci --no-audit --no-fund
 FROM node:${NODE_VERSION}-alpine AS builder
 RUN apk add --no-cache openssl
 WORKDIR /app
+
+ARG NEXT_PUBLIC_CLINIC_NAME
+ARG NEXT_PUBLIC_APP_NAME
+ARG NEXT_PUBLIC_DOCTOR_NAME_FR
+ARG NEXT_PUBLIC_DOCTOR_NAME_AR
+ARG NEXT_PUBLIC_SPECIALTY_FR
+ARG NEXT_PUBLIC_SPECIALTY_AR
+ARG NEXT_PUBLIC_CREDENTIALS_FR
+ARG NEXT_PUBLIC_CREDENTIALS_AR
+ARG NEXT_PUBLIC_TITLE
+ARG NEXT_PUBLIC_LOCATION
+ARG NEXT_PUBLIC_PHONES
+ARG NEXT_PUBLIC_ADDRESS_FR
+ARG NEXT_PUBLIC_ADDRESS_AR
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
@@ -63,21 +77,22 @@ RUN addgroup -g 1001 -S nodejs \
   && adduser  -u 1001 -S nextjs -G nodejs
 
 # --- Next.js runtime artefacts ---
-COPY --from=builder --chown=nextjs:nodejs /app/public         ./public
+COPY --from=builder --chown=nextjs:nodejs /app/public           ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static    ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static     ./.next/static
 
-# --- Prisma runtime artefacts ---
-# Generated client for the Next.js app
-COPY --from=builder --chown=nextjs:nodejs /app/prisma                       ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma         ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client  ./node_modules/@prisma/client
+# --- Prisma & seed runtime artefacts ---
+COPY --from=builder --chown=nextjs:nodejs /app/prisma                      ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma        ./node_modules/.prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client ./node_modules/@prisma/client
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/bcryptjs       ./node_modules/bcryptjs
 
 # Isolated Prisma CLI + all transitive deps for `prisma migrate deploy`
 COPY --from=prisma-cli --chown=nextjs:nodejs /prisma-cli/node_modules ./prisma-cli/node_modules
 
-# --- Persistent data dir (DB + uploaded medical documents) ---
+# --- Persistent data dir (DB + uploaded medical documents + backups) ---
 RUN mkdir -p /app/data /app/data/uploads /app/data/backups \
+  && chmod 700 /app/data /app/data/uploads /app/data/backups \
   && chown -R nextjs:nodejs /app/data
 VOLUME ["/app/data"]
 

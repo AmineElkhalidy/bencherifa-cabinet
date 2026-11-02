@@ -12,6 +12,7 @@ export default async function EditPatientPage(props: {
 }) {
   const { id } = await props.params;
   const session = await requireRole("RECEPTIONIST", "DOCTOR");
+  const isDoctor = session.role === "DOCTOR";
   const patient = await prisma.patient.findUnique({ where: { id } });
   if (!patient) notFound();
 
@@ -27,6 +28,7 @@ export default async function EditPatientPage(props: {
         <div className="mx-auto max-w-3xl">
           <PatientForm
             mode="edit"
+            canEditMedicalHistory={isDoctor}
             patient={{
               id: patient.id,
               name: patient.name,
@@ -35,9 +37,9 @@ export default async function EditPatientPage(props: {
               phoneNumber: patient.phoneNumber,
               cin: patient.cin,
               insuranceProvider: patient.insuranceProvider,
-              surgicalHistory: patient.surgicalHistory,
-              allergies: patient.allergies,
-              contraindications: patient.contraindications,
+              surgicalHistory: isDoctor ? patient.surgicalHistory : "",
+              allergies: isDoctor ? patient.allergies : "",
+              contraindications: isDoctor ? patient.contraindications : "",
             }}
           />
         </div>

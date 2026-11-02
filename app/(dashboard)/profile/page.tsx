@@ -1,13 +1,13 @@
 import { Header } from "@/components/layout/header";
 import { ProfileSettings } from "@/components/profile/profile-settings";
-import { requireRole } from "@/lib/auth/rbac";
+import { requireAuth } from "@/lib/auth/rbac";
 import type { Role } from "@/lib/constants";
 import { prisma } from "@/lib/db";
 
 export const metadata = { title: "Profil" };
 
 export default async function ProfilePage() {
-  const session = await requireRole("DOCTOR");
+  const session = await requireAuth();
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },

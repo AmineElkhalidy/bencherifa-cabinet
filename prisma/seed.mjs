@@ -11,10 +11,24 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+const DEFAULT_PASSWORDS = new Set([
+  "Doctor#2026",
+  "Reception#2026",
+  "ChangeMe!2026",
+]);
+
 async function ensureUser(username, password, role) {
   if (!username || !password) {
     console.warn(`[seed] skipping ${role} — credentials not provided`);
     return;
+  }
+  if (
+    process.env.NODE_ENV === "production" &&
+    DEFAULT_PASSWORDS.has(password)
+  ) {
+    console.warn(
+      `[seed] SECURITY WARNING: ${role} account '${username}' is being initialized with a default template password. Change it immediately in /profile or /settings/users.`
+    );
   }
   const existing = await prisma.user.findUnique({ where: { username } });
   if (existing) {

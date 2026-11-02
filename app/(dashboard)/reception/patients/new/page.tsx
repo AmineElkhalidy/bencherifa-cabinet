@@ -17,7 +17,10 @@ export default async function NewPatientPage() {
       />
       <div className="flex-1 overflow-auto p-6">
         <div className="mx-auto max-w-3xl">
-          <PatientForm mode="create" />
+          <PatientForm
+            mode="create"
+            canEditMedicalHistory={session.role === "DOCTOR"}
+          />
         </div>
       </div>
     </>

@@ -1,4 +1,4 @@
-# Cabinet Eddahbi — local production stack.
+# Cabinet Bencherifa — local production stack.
 #
 # Usage:
 #   cp .env.example .env       # then fill in the secrets
@@ -15,8 +15,22 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: cabinet-eddahbi:latest
-    container_name: cabinet-eddahbi
+      args:
+        NEXT_PUBLIC_CLINIC_NAME: ${NEXT_PUBLIC_CLINIC_NAME:-Cabinet Médical}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Cabinet Médical}
+        NEXT_PUBLIC_DOCTOR_NAME_FR: ${NEXT_PUBLIC_DOCTOR_NAME_FR:-}
+        NEXT_PUBLIC_DOCTOR_NAME_AR: ${NEXT_PUBLIC_DOCTOR_NAME_AR:-}
+        NEXT_PUBLIC_SPECIALTY_FR: ${NEXT_PUBLIC_SPECIALTY_FR:-}
+        NEXT_PUBLIC_SPECIALTY_AR: ${NEXT_PUBLIC_SPECIALTY_AR:-}
+        NEXT_PUBLIC_CREDENTIALS_FR: ${NEXT_PUBLIC_CREDENTIALS_FR:-}
+        NEXT_PUBLIC_CREDENTIALS_AR: ${NEXT_PUBLIC_CREDENTIALS_AR:-}
+        NEXT_PUBLIC_TITLE: ${NEXT_PUBLIC_TITLE:-Ordonnance Médicale}
+        NEXT_PUBLIC_LOCATION: ${NEXT_PUBLIC_LOCATION:-}
+        NEXT_PUBLIC_PHONES: ${NEXT_PUBLIC_PHONES:-}
+        NEXT_PUBLIC_ADDRESS_FR: ${NEXT_PUBLIC_ADDRESS_FR:-}
+        NEXT_PUBLIC_ADDRESS_AR: ${NEXT_PUBLIC_ADDRESS_AR:-}
+    image: cabinet-bencherifa:latest
+    container_name: cabinet-bencherifa
     restart: unless-stopped
     ports:
       - "${APP_PORT:-3000}:3000"
@@ -30,7 +44,9 @@ services:
       # --- Sessions (jose JWT) ---
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set in .env}
       SESSION_MAX_AGE_DAYS: ${SESSION_MAX_AGE_DAYS:-7}
-      ALLOW_INSECURE_SESSION: "true"
+      # Set to "false" when behind an HTTPS reverse proxy (Caddy/Nginx) to enforce Secure cookies.
+      # Keep "true" only when accessing directly over plain HTTP on a local clinic LAN.
+      ALLOW_INSECURE_SESSION: ${ALLOW_INSECURE_SESSION:-true}
 
       # --- File uploads ---
       UPLOAD_DIR: /app/data/uploads
@@ -40,6 +56,7 @@ services:
       ENABLE_BACKUP_CRON: ${ENABLE_BACKUP_CRON:-1}
       BACKUP_CRON: ${BACKUP_CRON:-0 0 * * *}
       BACKUP_DIR: /app/data/backups
+      BACKUP_RETENTION_COUNT: ${BACKUP_RETENTION_COUNT:-14}
 
       # --- Google Drive integration (service-account JSON) ---
       GOOGLE_DRIVE_CLIENT_EMAIL: ${GOOGLE_DRIVE_CLIENT_EMAIL:-}
@@ -47,9 +64,9 @@ services:
       GOOGLE_DRIVE_FOLDER_ID:    ${GOOGLE_DRIVE_FOLDER_ID:-}
 
       # --- First-run admin bootstrap ---
-      SEED_ON_BOOT:           ${SEED_ON_BOOT:-1}
-      SEED_DOCTOR_USERNAME:   ${SEED_DOCTOR_USERNAME:-doctor}
-      SEED_DOCTOR_PASSWORD:   ${SEED_DOCTOR_PASSWORD:?seed doctor password required on first boot}
+      SEED_ON_BOOT:            ${SEED_ON_BOOT:-1}
+      SEED_DOCTOR_USERNAME:    ${SEED_DOCTOR_USERNAME:-doctor}
+      SEED_DOCTOR_PASSWORD:    ${SEED_DOCTOR_PASSWORD:?seed doctor password required on first boot}
       SEED_RECEPTION_USERNAME: ${SEED_RECEPTION_USERNAME:-reception}
       SEED_RECEPTION_PASSWORD: ${SEED_RECEPTION_PASSWORD:?seed reception password required on first boot}
 

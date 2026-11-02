@@ -1,12 +1,13 @@
 import "server-only";
 
-import { copyFile } from "node:fs/promises";
+import { copyFile, unlink } from "node:fs/promises";
 import { access, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Worksheet } from "exceljs";
 import ExcelJS from "exceljs";
 
-import { prisma } from "@/lib/db";
+import { ensureDatabasePragmas, prisma } from "@/lib/db";
+import { logger } from "@/lib/logger";
 import {
   backupDir,
   databasePath,
@@ -17,7 +18,7 @@ import {
 import { zipDirectory } from "./archive";
 import { APP_CONFIG } from "@/lib/config";
 import { buildAnalyticsSnapshot } from "./analytics-snapshot";
-import { iso, toCsv } from "./csv";
+import { iso, sanitizeSpreadsheetValue, sha256File, toCsv } from "./csv";
 
 export type BackupArtifactFormat = "xlsx" | "csv" | "db" | "zip";
 
@@ -26,6 +27,7 @@ export type BackupArtifact = {
   absolutePath: string;
   filename: string;
   bytes: number;
+  sha256: string;
 };
 
 const XLSX_MIME =
@@ -41,7 +43,7 @@ export const BACKUP_MIMES: Record<BackupArtifactFormat, string> = {
   zip: ZIP_MIME,
 };
 
-function timestampSlug(now: Date = new Date()) {
+export function timestampSlug(now: Date = new Date()) {
   const pad = (n: number) => String(n).padStart(2, "0");
   return [
     now.getFullYear(),
@@ -50,6 +52,7 @@ function timestampSlug(now: Date = new Date()) {
     "T",
     pad(now.getHours()),
     pad(now.getMinutes()),
+    pad(now.getSeconds()),
   ].join("");
 }
 
@@ -61,6 +64,14 @@ function styleHeader(ws: Worksheet) {
     fgColor: { argb: "FFE9F1F8" },
   };
   ws.views = [{ state: "frozen", ySplit: 1 }];
+}
+
+function sanitizeRowForExcel<T extends Record<string, unknown>>(row: T): T {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    out[k] = typeof v === "string" ? sanitizeSpreadsheetValue(v) : v;
+  }
+  return out as T;
 }
 
 function addSheet<T extends Record<string, unknown>>(
@@ -75,7 +86,7 @@ function addSheet<T extends Record<string, unknown>>(
     key: c.key,
     width: c.width ?? 18,
   }));
-  ws.addRows(rows);
+  ws.addRows(rows.map(sanitizeRowForExcel));
   styleHeader(ws);
   return ws;
 }
@@ -85,24 +96,55 @@ async function artifactFromPath(
   format: BackupArtifactFormat
 ): Promise<BackupArtifact> {
   const s = await stat(absolutePath);
+  if (s.size === 0) {
+    throw new Error(`Generated backup artifact is empty: ${absolutePath}`);
+  }
+  const sha256 = await sha256File(absolutePath);
   return {
     format,
     absolutePath,
     filename: path.basename(absolutePath),
     bytes: s.size,
+    sha256,
   };
+}
+
+/**
+ * Creates a transactionally consistent snapshot of the active SQLite database,
+ * safely incorporating any uncheckpointed WAL pages using `VACUUM INTO`.
+ */
+export async function createConsistentSqliteBackup(
+  destPath: string
+): Promise<void> {
+  await ensureDatabasePragmas(prisma);
+  // Remove destination if it already exists (VACUUM INTO requires a non-existent target)
+  await unlink(destPath).catch(() => undefined);
+
+  const escapedDest = destPath.replace(/'/g, "''");
+  try {
+    await prisma.$executeRawUnsafe(`VACUUM INTO '${escapedDest}';`);
+  } catch (err) {
+    // Fallback: checkpoint WAL then copy file if VACUUM INTO fails on an older SQLite build
+    logger.warn(
+      "backup",
+      "VACUUM INTO failed, falling back to WAL checkpoint + copy",
+      { error: err }
+    );
+    await prisma.$queryRawUnsafe("PRAGMA wal_checkpoint(TRUNCATE);");
+    await copyFile(databasePath(), destPath);
+  }
 }
 
 /**
  * Full cabinet backup on the persistent volume:
  *   - XLSX workbook (all tables + analytics snapshot)
  *   - CSV exports (patients, consultations, expenses)
- *   - SQLite database copy
+ *   - Consistent SQLite database snapshot (via VACUUM INTO)
  *   - ZIP of uploaded medical documents (when non-empty)
  */
 export async function buildBackupArtifacts(
   now: Date = new Date()
-): Promise<BackupArtifact[]> {
+): Promise<{ slug: string; artifacts: BackupArtifact[] }> {
   const dir = backupDir();
   await ensureDir(dir);
   const slug = timestampSlug(now);
@@ -351,7 +393,11 @@ export async function buildBackupArtifacts(
   wsAnalytics.addRow(["KPI", "Value", "Period"]);
   styleHeader(wsAnalytics);
   analytics.kpis.forEach((k) =>
-    wsAnalytics.addRow([k.metric, k.value, k.period])
+    wsAnalytics.addRow([
+      k.metric,
+      sanitizeSpreadsheetValue(k.value),
+      k.period,
+    ])
   );
   wsAnalytics.addRow([]);
   wsAnalytics.addRow(["Date", "Visits", "Revenue (MAD)"]);
@@ -365,7 +411,11 @@ export async function buildBackupArtifacts(
   const diagHeaderRow = wsAnalytics.lastRow?.number ?? 1;
   wsAnalytics.getRow(diagHeaderRow).font = { bold: true };
   analytics.diagnoses.forEach((d) =>
-    wsAnalytics.addRow([d.diagnosis, d.cases, d.sharePct])
+    wsAnalytics.addRow([
+      sanitizeSpreadsheetValue(d.diagnosis),
+      d.cases,
+      d.sharePct,
+    ])
   );
 
   const xlsxName = `cabinet-${slug}.xlsx`;
@@ -486,10 +536,13 @@ export async function buildBackupArtifacts(
     await access(dbSrc);
     const dbName = `cabinet-${slug}.db`;
     const dbDest = path.join(dir, dbName);
-    await copyFile(dbSrc, dbDest);
+    await createConsistentSqliteBackup(dbDest);
     artifacts.push(await artifactFromPath(dbDest, "db"));
-  } catch {
-    console.warn(`[backup] database file not found at ${dbSrc}, skipping .db copy`);
+  } catch (err) {
+    logger.warn("backup", "Database snapshot skipped or failed", {
+      dbSrc,
+      error: err,
+    });
   }
 
   const zipName = `cabinet-${slug}-uploads.zip`;
@@ -499,5 +552,5 @@ export async function buildBackupArtifacts(
     artifacts.push(await artifactFromPath(zipPath, "zip"));
   }
 
-  return artifacts;
+  return { slug, artifacts };
 }
